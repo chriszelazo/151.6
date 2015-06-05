@@ -87,12 +87,12 @@ def boost(t_, emails_, weights_):
 		print "Alpha crashed with %f" % best.error
 		exit(1)
 
-	# print "Alpha: %f" % alpha
+	print "Alpha: %f" % alpha
 
 	for (i, email) in enumerate(emails_):
 		classification = 0
 
-		if email.label == 1:
+		if best.label == 1:
 			classification = classifyExists(email.corpus[best.word])
 		else:
 			classification = classifyDoesntExist(email.corpus[best.word])
@@ -131,12 +131,12 @@ for t in t_set:
 		label = classifyFinal(email, results)
 
 		if label != email.label:
-			error += 1
+			errors += 1
 
 	print "t: %d | Error: %f" % (t, (1.0 * errors / len(train)))
 
 	for (alpha, best) in results:
 		if best.label == 1:
-			print "Word is spam: %s" % dictionary[best.word]
-		else:
 			print "Word not spam: %s" % dictionary[best.word]
+		else:
+			print "Word is spam: %s" % dictionary[best.word]
