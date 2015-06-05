@@ -57,19 +57,17 @@ def calcError(word_, emails_, weights_):
 	for (i, email) in enumerate(emails_):
 		class_label = classifyExists(email.corpus[word_])
 
-		# print "C_Label: %d | E_Label: %d" % (class_label, email.label)
 		if (class_label != email.label):
 			error += weights_[i]
 
 	return error
 
-def boost(t_, emails_, weights_):
+def boost(emails_, weights_):
 	best = Best(-1, 100.0, 0)
 
 	# Handle error
 	for (i, word) in enumerate(emails_[0].corpus):
 		error = calcError(i, emails_, weights_)
-		# print "Error (boost) %f" % error
 
 		if (error < best.error):
 			best.word = i
@@ -81,13 +79,11 @@ def boost(t_, emails_, weights_):
 			best.label = -1
 
 	# Hittin' the gym
-	try:
-		alpha = 0.5 * math.log((1.0 - best.error) / best.error)
-	except ValueError:
-		print "Alpha crashed with %f" % best.error
-		exit(1)
-
-	print "Alpha: %f" % alpha
+	# try:
+	alpha = 0.5 * math.log((1.0 - best.error) / best.error)
+	# except ValueError:
+	# 	print "Alpha crashed with %f" % best.error
+	# 	exit(1)
 
 	for (i, email) in enumerate(emails_):
 		classification = 0
@@ -97,13 +93,13 @@ def boost(t_, emails_, weights_):
 		else:
 			classification = classifyDoesntExist(email.corpus[best.word])
 
-		weights_[i] = weights_[i] * math.exp(-alpha * email.label * classification)
-
-	print "Weights: %f" % sum(weights_)
+		weights_[i] *= math.exp(-alpha * email.label * classification)
 
 	# Normalize
 	sum_w = sum(weights_)
-	weights_ = [(1.0 * weight / sum_w) for weight in weights_]
+
+	for i in range(len(weights_)):
+		weights_[i] /= sum_w
 
 	return (alpha, best)
 
@@ -112,20 +108,27 @@ def boost(t_, emails_, weights_):
 def classifyFinal(email_, results_):
 	total = 0.0
 	for (alpha, best) in results_:
-		if email_.corpus[best.word] == best.label:
-			total += alpha
+		if best.label == 1:
+			if email_.corpus[best.word] == 1:
+				total += alpha
+			else:
+				total -= alpha
 		else:
-			total -= alpha
+			if email_.corpus[best.word] == 0:
+				total += alpha
+			else:
+				total -= alpha
 
 	return (total / math.fabs(total))
 
 # V-Tec just kicked in
-t_set = [3] #[3, 7, 10, 15, 20]
-weights = [(1.0/len(train)) for email in train]
+t_set = [3, 7, 10, 15, 20]
 
 for t in t_set:
-	results = [boost(t, train, weights) for i in range(t)]
+	weights = [(1.0/len(train)) for email in train]
+	results = [boost(train, weights) for i in range(t)]
 
+	# Training
 	errors = 0
 	for email in train:
 		label = classifyFinal(email, results)
@@ -133,10 +136,21 @@ for t in t_set:
 		if label != email.label:
 			errors += 1
 
-	print "t: %d | Error: %f" % (t, (1.0 * errors / len(train)))
+	print "\nt: %d | Training Error: %f" % (t, (1.0 * errors / len(train)))
+
+	# Test
+	errors = 0
+	for email in test:
+		label = classifyFinal(email, results)
+
+		if label != email.label:
+			errors += 1
+
+	print "t: %d | Testing Error: %f" % (t, (1.0 * errors / len(test)))
+
 
 	for (alpha, best) in results:
 		if best.label == 1:
-			print "Word not spam: %s" % dictionary[best.word]
+			print " + %s" % dictionary[best.word]
 		else:
-			print "Word is spam: %s" % dictionary[best.word]
+			print " - %s" % dictionary[best.word]
