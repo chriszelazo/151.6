@@ -62,48 +62,47 @@ def calcError(word_, emails_, weights_):
 
 	return error
 
-def boost(emails_, weights_):
-	best = Best(-1, 100.0, 0)
-
-	# Handle error
+def handleError(emails_, weights_, best_):
 	for (i, word) in enumerate(emails_[0].corpus):
 		error = calcError(i, emails_, weights_)
 
-		if (error < best.error):
-			best.word = i
-			best.error = error
-			best.label = 1
-		elif((1.0 - error) < best.error):
-			best.word = i
-			best.error = 1.0 - error
-			best.label = -1
+		negated = 1.0 - error
+		if (error < best_.error):
+			best_.word = i
+			best_.error = error
+			best_.label = 1
+		elif(negated < best_.error):
+			best_.word = i
+			best_.error = negated
+			best_.label = -1
+
+	return best_
+
+def boost(emails_, weights_):
+	# Handle error
+	best = handleError(emails_, weights_, Best(-1, 100.0, 0))
 
 	# Hittin' the gym
-	# try:
 	alpha = 0.5 * math.log((1.0 - best.error) / best.error)
-	# except ValueError:
-	# 	print "Alpha crashed with %f" % best.error
-	# 	exit(1)
 
 	for (i, email) in enumerate(emails_):
-		classification = 0
+		word = email.corpus[best.word]
+		const = -alpha * email.label
 
 		if best.label == 1:
-			classification = classifyExists(email.corpus[best.word])
+			weights_[i] *= math.exp(const * classifyExists(word))
 		else:
-			classification = classifyDoesntExist(email.corpus[best.word])
-
-		weights_[i] *= math.exp(-alpha * email.label * classification)
+			weights_[i] *= math.exp(const * classifyDoesntExist(word))
 
 	# Normalize
 	sum_w = sum(weights_)
-
 	for i in range(len(weights_)):
 		weights_[i] /= sum_w
 
 	return (alpha, best)
 
-###############################################################################
+def signOf(num_):
+	return (num_ / math.fabs(num_))
 
 def classifyFinal(email_, results_):
 	total = 0.0
@@ -119,7 +118,19 @@ def classifyFinal(email_, results_):
 			else:
 				total -= alpha
 
-	return (total / math.fabs(total))
+	return signOf(total)
+
+def countErrors(data_):
+	errors = 0
+	for email in data_:
+		label = classifyFinal(email, results)
+
+		if label != email.label:
+			errors += 1
+
+	return errors
+
+###############################################################################
 
 # V-Tec just kicked in
 t_set = [3, 7, 10, 15, 20]
@@ -129,28 +140,11 @@ for t in t_set:
 	results = [boost(train, weights) for i in range(t)]
 
 	# Training
-	errors = 0
-	for email in train:
-		label = classifyFinal(email, results)
-
-		if label != email.label:
-			errors += 1
-
-	print "\nt: %d | Training Error: %f" % (t, (1.0 * errors / len(train)))
+	print "\nt: %d | Training Error: %f" % (t, (1.0 * countErrors(train) / len(train)))
 
 	# Test
-	errors = 0
-	for email in test:
-		label = classifyFinal(email, results)
+	print "t: %d | Testing Error: %f" % (t, (1.0 * countErrors(test) / len(test)))
 
-		if label != email.label:
-			errors += 1
-
-	print "t: %d | Testing Error: %f" % (t, (1.0 * errors / len(test)))
-
-
+	# Print words from dictionary
 	for (alpha, best) in results:
-		if best.label == 1:
-			print " + %s" % dictionary[best.word]
-		else:
-			print " - %s" % dictionary[best.word]
+		print (" + %s" if best.label == 1 else " - %s") % dictionary[best.word]
